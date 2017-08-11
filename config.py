@@ -22,6 +22,7 @@ default_cfg = {
 	
 	"greenshell_cost": 3,
 	"greenshell_hit_vr": -15,
+	"greenshell_hit_target_chance": 0.2,
 	"greenshell_hit_player_chance": 0.2,
 	"greenshell_hit_nobody_chance": 0.2,
 	

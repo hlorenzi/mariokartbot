@@ -11,9 +11,13 @@ class ItemBanana:
 	
 	def can_hold(self):
 		return True
+		
+	
+	def can_specify_target(self):
+		return False
 	
 		
-	def use(self, mk, channel_id, msg_id, was_held):
+	def use(self, mk, channel_id, msg_id, specified_target, was_held):
 		user_state = mk.get_user_state(self.user_id)
 		
 		if not was_held:

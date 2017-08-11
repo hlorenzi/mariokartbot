@@ -25,6 +25,10 @@ class DiscordIO:
 	def get_user_mention(self, user_id):
 		return user_id.mention
 		
+	
+	def get_message_mentions(self, msg_id):
+		return msg_id.mentions
+		
 		
 class Scheduler:
 	def __init__(self):
@@ -54,7 +58,7 @@ async_queue = list()
 scheduler = Scheduler()
 io = DiscordIO(async_queue, client)
 replier = Replier(io, cfg)
-mk = MarioKartManager(replier, scheduler, cfg)
+mk = MarioKartManager(io, replier, scheduler, cfg)
 
 
 @client.event

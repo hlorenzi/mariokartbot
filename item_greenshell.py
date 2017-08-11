@@ -13,10 +13,16 @@ class ItemGreenShell:
 	
 	def can_hold(self):
 		return True
+		
+	
+	def can_specify_target(self):
+		return True
 	
 		
-	def use(self, mk, channel_id, msg_id, was_held):
-		target_user_id = self.choose_target(mk, channel_id, msg_id)
+	def use(self, mk, channel_id, msg_id, specified_target, was_held):
+		target_user_id = specified_target
+		if target_user_id == None or random.random() >= self.cfg["greenshell_hit_target_chance"]:
+			target_user_id = self.choose_target(mk, channel_id, msg_id)
 		
 		user_state = mk.get_user_state(self.user_id)
 		target_state = mk.get_user_state(target_user_id)

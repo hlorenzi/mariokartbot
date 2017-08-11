@@ -20,7 +20,7 @@ class Replier:
 		
 	def reply_invalid_command(self, user_state, channel_id, msg_id, content):
 		reply = self.make_user_text(user_state) + ": "
-		reply += "invalid command"
+		reply += "invalid command `" + content + "`"
 		self.send_msg(channel_id, reply)
 		
 		
@@ -103,13 +103,13 @@ class Replier:
 			
 		reply += self.make_item_name(item) + " " + self.make_item_emoji(item) + " "
 		reply += "targeting "
-		reply += self.make_user_text(target_state) + " "
+		reply += self.make_target_text(user_state, target_state) + " "
 		
 		reply += "in :clock3: " + str(delay) + "s!"
 		self.send_msg(channel_id, reply)
 		
 		
-	def reply_item_use_delayed_target_none(self, channel_id, user_state, target_state, item, was_held, delay):
+	def reply_item_use_delayed_target_none(self, channel_id, user_state, item, was_held):
 		reply = self.make_user_text(user_state) + " "
 		reply += "threw "
 		
@@ -187,22 +187,25 @@ class Replier:
 			reply = self.make_item_name(item) + " " + self.make_item_emoji(item) + " :boom: "
 			reply += self.make_item_emoji(simulated_hit.held_item)
 			reply += text_between_emoji_and_target
-			reply += "hit the item held by " + self.make_user_text(target_state) + "!"
+			reply += "hit the item held by "
+			reply += self.make_target_text(user_state, target_state) + "!"
 			return reply
 		
 		else:
 			reply = self.make_item_name(item) + " " + self.make_item_emoji(item) + " :boom: "
 			reply += text_between_emoji_and_target
 			reply += "hit "
-			
-			if user_state == None or user_state.user_id != target_state.user_id:
-				reply += self.make_user_text(target_state) + "! "
-			else:
-				reply += "**themselves**! "
-			
+			reply += self.make_target_text(user_state, target_state) + "! "
 			reply += "*(" + str(simulated_hit.vr_penalty) + " VR)*"
 			
 		return reply
+		
+		
+	def make_target_text(self, user_state, target_state):
+		if user_state == None or user_state.user_id != target_state.user_id:
+			return self.make_user_text(target_state)
+		else:
+			return "**themselves**"
 		
 		
 	def make_user_text(self, state):

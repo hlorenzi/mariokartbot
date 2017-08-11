@@ -28,7 +28,8 @@ class SimulatedHit:
 
 
 class MarioKartManager:
-	def __init__(self, replier, scheduler, cfg):
+	def __init__(self, io, replier, scheduler, cfg):
+		self.io = io
 		self.replier = replier
 		self.scheduler = scheduler
 		self.cfg = cfg
@@ -81,25 +82,34 @@ class MarioKartManager:
 		
 	# Decodes and executes a "use" command.
 	def decode_command_use(self, channel_id, user_id, msg_id, tokens):
-		if len(tokens) != 2:
+		if len(tokens) < 2 or len(tokens) > 3:
 			return False
 			
 		item_fn = self.decode_item(tokens[1])
 		if item_fn == None:
 			return False
 			
+		item = item_fn(self.cfg, user_id)
+		
+		mentioned_target = None
+		if len(tokens) == 3:
+			if not item.can_specify_target():
+				return False
+		
+			mentioned_target = self.decode_mention(msg_id, tokens[2])
+			if mentioned_target == None:
+				return False
+			
 		already_held_item = self.held_items.get(user_id)
 		if already_held_item != None:
 			self.replier.reply_cant_use_holding_item(self.get_user_state(user_id), channel_id, already_held_item)
 			return True
 		
-		item = item_fn(self.cfg, user_id)
-		
 		if not self.itemboxes.can_spend(user_id, item.cost()):
 			self.replier.reply_insufficient_itemboxes(self.get_user_state(user_id), channel_id, item)
 			return True
 		
-		item.use(self, channel_id, msg_id, False)
+		item.use(self, channel_id, msg_id, mentioned_target, False)
 		return True
 		
 		
@@ -130,7 +140,7 @@ class MarioKartManager:
 		
 	# Decodes and executes a "drop" command.
 	def decode_command_drop(self, channel_id, user_id, msg_id, tokens):
-		if len(tokens) != 1:
+		if len(tokens) < 1 or len(tokens) > 2:
 			return False
 			
 		already_held_item = self.held_items.get(user_id)
@@ -138,8 +148,17 @@ class MarioKartManager:
 			self.replier.reply_no_held_item(self.get_user_state(user_id), channel_id)
 			return True
 			
+		mentioned_target = None
+		if len(tokens) == 2:
+			if not already_held_item.can_specify_target():
+				return False
+		
+			mentioned_target = self.decode_mention(msg_id, tokens[1])
+			if mentioned_target == None:
+				return False
+				
 		del self.held_items[user_id]
-		already_held_item.use(self, channel_id, msg_id, True)
+		already_held_item.use(self, channel_id, msg_id, mentioned_target, True)
 		return True
 		
 		
@@ -152,6 +171,15 @@ class MarioKartManager:
 		}
 		
 		return possible_items.get(token)
+		
+		
+	# Decodes a mentioned user and return its id.
+	def decode_mention(self, msg_id, token):
+		mentions = self.io.get_message_mentions(msg_id)
+		if len(mentions) != 1:
+			return None
+			
+		return mentions[0]
 		
 		
 	# Returns an object holding the current state of a user.
