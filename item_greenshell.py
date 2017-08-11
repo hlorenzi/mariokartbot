@@ -2,61 +2,48 @@ import random
 
 
 class ItemGreenShell:
-		
-	def __init__(self, mk, command, author, channel):
-		self.mk = mk
-		self.command = command
-		self.author = author
-		self.channel = channel
-		self.text_user = mk.maketext_user(author)
-	
-	
-	def name(self):
-		return "GREEN SHELL"
-
-	
-	def emoji(self):
-		return self.mk.cfg.EMOJI_GREENSHELL
+	def __init__(self, cfg, user_id):
+		self.cfg = cfg
+		self.user_id = user_id
 
 	
 	def cost(self):
-		return self.mk.cfg.GREENSHELL_COST
+		return self.cfg["greenshell_cost"]
 		
 	
 	def can_hold(self):
 		return True
 	
-	
-	def choose_target(self):
-		channellog = self.mk.get_channellog(self.channel)
 		
-		for i in range(len(channellog)):
-			possible_target = channellog[-1 - i]
+	def use(self, mk, channel_id, msg_id, was_held):
+		target_user_id = self.choose_target(mk, channel_id, msg_id)
+		
+		user_state = mk.get_user_state(self.user_id)
+		target_state = mk.get_user_state(target_user_id)
+		simulated_hit = mk.simulate_hit(target_user_id, self.cfg["greenshell_hit_vr"], False)
+		
+		if not was_held:
+			mk.itemboxes.spend(self.user_id, self.cost())
+		
+		mk.replier.reply_item_use_and_hit(channel_id, user_state, target_state, self, was_held, simulated_hit)
+		
+		mk.perform_hit(simulated_hit)
+		mk.perform_random_banana_hit(channel_id, self.user_id)
+	
+	
+	def choose_target(self, mk, channel_id, msg_id_to_avoid):
+		channel_log = mk.msglog.get_messages(channel_id)
+		
+		for i in range(len(channel_log)):
+			possible_target_msg = channel_log[-1 - i]
 			
-			if possible_target == self.command:
+			if possible_target_msg.msg_id == msg_id_to_avoid:
 				continue
 			
-			if random.random() < self.mk.cfg.GREENSHELL_HIT_PLAYER_CHANCE:
-				return possible_target
+			if random.random() < self.cfg["greenshell_hit_player_chance"]:
+				return possible_target_msg.user_id
 				
-			if random.random() < self.mk.cfg.GREENSHELL_HIT_WALL_CHANCE:
+			if random.random() < self.cfg["greenshell_hit_nobody_chance"]:
 				break
 				
 		return None
-	
-		
-	async def use(self):
-		target = self.choose_target()
-		
-		reply = self.text_user + " "
-		reply += "threw a "
-		
-		if target == None:
-			reply += self.name() + " " + self.emoji() + " "
-			reply += "and it just crashed into a wall..."
-			
-		else:
-			reply += self.mk.hit_user("and it ", self, target, self.mk.cfg.GREENSHELL_HIT_VR)
-			
-		await self.mk.client.send_message(self.channel, reply)
-		await self.mk.check_random_banana_hit(self.command)

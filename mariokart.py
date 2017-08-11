@@ -1,7 +1,6 @@
-from collections import deque
 import random
-import math
-import discord
+from threading import RLock
+from message_log import MessageLogManager
 from score import ScoreManager
 from itembox import ItemBoxManager
 from item_greenshell import ItemGreenShell
@@ -9,257 +8,199 @@ from item_redshell import ItemRedShell
 from item_banana import ItemBanana
 
 
-class MarioKartLogic:
+class UserState:
+	def __init__(self, user_id, vr, itemboxes):
+		self.user_id = user_id
+		self.vr = vr
+		self.itemboxes = itemboxes
+
+
+class SimulatedHit:
+	HIT_NOTHING = 0
+	HIT_USER = 1
+	HIT_HELD_ITEM = 2
 	
-	def __init__(self, client, cfg):
-		self.client = client
+	def __init__(self, kind, held_item = None, user_id = None, vr_penalty = None):
+		self.kind = kind
+		self.held_item = held_item
+		self.user_id = user_id
+		self.vr_penalty = vr_penalty
+
+
+class MarioKartManager:
+	def __init__(self, replier, scheduler, cfg):
+		self.replier = replier
+		self.scheduler = scheduler
 		self.cfg = cfg
+		self.lock = RLock()
+		self.msglog = MessageLogManager(cfg)
+		self.score = ScoreManager(cfg)
+		self.itemboxes = ItemBoxManager(cfg)
 		
-		# A dict of Channels -> Message log deques
-		self.serverlog = dict()
-		
-		self.score_mngr = ScoreManager(cfg)
-		self.itembox_mngr = ItemBoxManager(cfg)
-		
-		self.existing_items = list()
 		self.held_items = dict()
+		self.placed_down_items = list()
 		
 		
-	def get_channellog(self, channel):
-		return self.serverlog.setdefault(channel, deque())
+	# Receives a message in a thread-safe manner.
+	def receive_msg(self, channel_id, user_id, msg_id, content):
+		self.lock.acquire()
 		
+		if not self.decode_command(channel_id, user_id, msg_id, content):
+			self.replier.reply_invalid_command(self.get_user_state(user_id), channel_id, msg_id, content)
+			
+		self.msglog.record_message(channel_id, user_id, msg_id)
 		
-	def record_message(self, msg):
-		# Add the message to the correct channel log.
-		channellog = self.get_channellog(msg.channel)
-		channellog.append(msg)
-		
-		# Cap max log length by removing the oldest messages.
-		while len(channellog) > self.cfg.MAX_MESSAGELOG_LENGTH_PER_CHANNEL:
-			channellog.popleft()
+		self.lock.release()
 		
 	
-	def print_logs(self):
-		for c in self.serverlog.values():
-			for m in c:
-				print("#" + m.channel.name + ": " + m.author.name + ": " + m.content)
-				
-		print("---")
-		
-		
-	async def handle_message(self, msg):
-		if msg.author == self.client.user:
-			return
+	# Decodes and executes a command from a message.
+	# Returns whether the message is a valid command or is not a command at all.
+	def decode_command(self, channel_id, user_id, msg_id, content):
+		if not content.startswith("="):
+			return True
+			
+		self.replier.delete_msg(channel_id, user_id, msg_id)
 	
-		self.record_message(msg)
-		
-		if not msg.content.startswith("="):
-			await self.check_random_banana_hit(msg)
-			return
-			
-		if msg.content.startswith("=bothold"):
-			await self.client.delete_message(msg)
-			item = ItemBanana(self, None, self.client.user, msg.channel)
-			self.hold_item(self.client.user, item)
-			return
-			
-		tokens = msg.content[1:].split()
+		tokens = content[1:].split()
 		
 		if len(tokens) < 1:
-			return
-		
-		item = None
-		
-		commandfn = MarioKartLogic.commandtable.get(tokens[0])
-		if commandfn == None:
-			return
-			
-		if commandfn[0] == 1:
-			if len(tokens) < 2:
-				return
-		
-			itemfn = MarioKartLogic.itemtable.get(tokens[1])
-			if itemfn == None:
-				return
-				
-			item = itemfn(self, msg, msg.author, msg.channel)
-			
-		await self.client.delete_message(msg)
-		await commandfn[1](self, msg, item)
-		
-		
-	async def try_spend_itemboxes(self, msg, item):
-		if not self.itembox_mngr.try_use(msg.author, item.cost()):
-			reply = self.maketext_user(msg.author)
-			reply += ": "
-			reply += item.name() + item.emoji() + " "
-			reply += "costs " + str(item.cost()) + self.cfg.EMOJI_ITEMBOX
-			await self.client.send_message(msg.channel, reply)
 			return False
 			
+		possible_commands = {
+			"use":  MarioKartManager.decode_command_use,
+			"hold": MarioKartManager.decode_command_hold,
+			"drop": MarioKartManager.decode_command_drop
+		}
+		
+		decode_command_fn = possible_commands[tokens[0]]
+		if decode_command_fn == None:
+			return False
+			
+		return decode_command_fn(self, channel_id, user_id, msg_id, tokens)
+		
+		
+	# Decodes and executes a "use" command.
+	def decode_command_use(self, channel_id, user_id, msg_id, tokens):
+		if len(tokens) != 2:
+			return False
+			
+		item_fn = self.decode_item(tokens[1])
+		if item_fn == None:
+			return False
+			
+		already_held_item = self.held_items.get(user_id)
+		if already_held_item != None:
+			self.replier.reply_cant_use_holding_item(self.get_user_state(user_id), channel_id, already_held_item)
+			return True
+		
+		item = item_fn(self.cfg, user_id)
+		
+		if not self.itemboxes.can_spend(user_id, item.cost()):
+			self.replier.reply_insufficient_itemboxes(self.get_user_state(user_id), channel_id, item)
+			return True
+		
+		item.use(self, channel_id, msg_id, False)
 		return True
 		
 		
-	async def try_use_item(self, msg, item):
-		if not self.can_hold_item(msg.author):
-			reply = self.maketext_user(msg.author)
-			reply += ": drop your held item first!"
-			await self.client.send_message(msg.channel, reply)
+	# Decodes and executes a "hold" command.
+	def decode_command_hold(self, channel_id, user_id, msg_id, tokens):
+		if len(tokens) != 2:
 			return False
 			
+		item_fn = self.decode_item(tokens[1])
+		if item_fn == None:
+			return False
+			
+		already_held_item = self.held_items.get(user_id)
+		if already_held_item != None:
+			self.replier.reply_already_holding_item(self.get_user_state(user_id), channel_id, already_held_item)
+			return True
+		
+		item = item_fn(self.cfg, user_id)
+		
+		if not self.itemboxes.can_spend(user_id, item.cost()):
+			self.replier.reply_insufficient_itemboxes(self.get_user_state(user_id), channel_id, item)
+			return True
+		
+		self.held_items[user_id] = item
+		self.replier.reply_hold_item(self.get_user_state(user_id), channel_id, item)
 		return True
 		
 		
-	async def try_hold_item(self, msg, item):
-		if not self.can_hold_item(msg.author):
-			reply = self.maketext_user(msg.author)
-			reply += ": you're already holding an item!"
-			await self.client.send_message(msg.channel, reply)
+	# Decodes and executes a "drop" command.
+	def decode_command_drop(self, channel_id, user_id, msg_id, tokens):
+		if len(tokens) != 1:
 			return False
 			
-		if not item.can_hold():
-			reply = self.maketext_user(msg.author)
-			reply += ": you can't hold a " + item.name() + " " + item.emoji() + "!"
-			await self.client.send_message(msg.channel, reply)
-			return False
+		already_held_item = self.held_items.get(user_id)
+		if already_held_item == None:
+			self.replier.reply_no_held_item(self.get_user_state(user_id), channel_id)
+			return True
 			
+		del self.held_items[user_id]
+		already_held_item.use(self, channel_id, msg_id, True)
 		return True
-			
 		
-	async def try_drop_item(self, msg):
-		if self.can_hold_item(msg.author):
-			reply = self.maketext_user(msg.author)
-			reply += ": you're not holding an item!"
-			await self.client.send_message(msg.channel, reply)
-			return False
-			
-		return True
-			
 		
-	async def command_use(self, msg, item):
-		if not await self.try_use_item(msg, item):
-			return
-			
-		if not await self.try_spend_itemboxes(msg, item):
-			return
+	# Decodes an item name and returns its constructor.
+	def decode_item(self, token):
+		possible_items = {
+			"gs": ItemGreenShell,
+			"rs": ItemRedShell,
+			"b":  ItemBanana
+		}
 		
-		await item.use()
+		return possible_items.get(token)
+		
+		
+	# Returns an object holding the current state of a user.
+	def get_user_state(self, user_id):
+		return UserState(user_id, self.score.get(user_id), self.itemboxes.get(user_id))
 
-		
-	async def command_hold(self, msg, item):
-		if not await self.try_hold_item(msg, item):
-			return
-		
-		if not await self.try_spend_itemboxes(msg, item):
-			return
-		
-		reply = item.text_user + " "
-		reply += "held a " + item.name() + item.emoji() + "!"
-		await self.client.send_message(item.channel, reply)
-		await self.check_random_banana_hit(item.command)
-		self.hold_item(item.author, item)
 
-		
-	async def command_drop(self, msg, _dummy):
-		if not await self.try_drop_item(msg):
-			return
-			
-		item = self.unhold_item(msg.author)
-		await item.use()
-
-		
-	commandtable = {
-		"use": [1, command_use],
-		"hold": [1, command_hold],
-		"drop": [0, command_drop]
-	}
-
+	# Simulates an item hitting a user.
+	def simulate_hit(self, target_user_id, vr_penalty, ignores_held_item):
+		if target_user_id == None:
+			return SimulatedHit(SimulatedHit.HIT_NOTHING)
 	
-	itemtable = {
-		"gs": ItemGreenShell,
-		"rs": ItemRedShell,
-		"b": ItemBanana
-	}
-	
+		target_held_item = self.held_items.get(target_user_id)
 		
-	async def check_random_banana_hit(self, target):
-		if target == None:
+		if not ignores_held_item and target_held_item != None:
+			return SimulatedHit(SimulatedHit.HIT_HELD_ITEM, user_id = target_user_id, held_item = target_held_item)
+			
+		return SimulatedHit(SimulatedHit.HIT_USER, user_id = target_user_id, vr_penalty = vr_penalty)
+		
+	
+	# Actually performs the effect of a prevreplierusly simulated hit.
+	def perform_hit(self, simulated_hit):
+		if simulated_hit.kind == SimulatedHit.HIT_NOTHING:
 			return
 			
-		for item in self.existing_items:
+		if simulated_hit.kind == SimulatedHit.HIT_HELD_ITEM:
+			del self.held_items[simulated_hit.user_id]
+			return
+			
+		self.score.add(simulated_hit.user_id, simulated_hit.vr_penalty)
+		
+		
+	def place_down_item(self, item):
+		self.placed_down_items.append(item)
+		
+		
+	def destroy_placed_down_item(self, item):
+		self.placed_down_items.remove(item)
+	
+	
+	def perform_random_banana_hit(self, channel_id, target_user_id):
+		if target_user_id == None:
+			return
+			
+		for item in self.placed_down_items:
 			if isinstance(item, ItemBanana):
-				if random.random() < self.cfg.BANANA_RANDOM_HIT_CHANCE:
-					await item.hit_random(target)
+				if item.channel_id != channel_id:
+					continue
+				
+				if random.random() < self.cfg["banana_random_hit_chance"]:
+					item.slip(self, channel_id, target_user_id)
 					return
-		
-		
-	def create_item(self, item):
-		self.existing_items.append(item)
-		
-		
-	def destroy_item(self, item):
-		self.existing_items.remove(item)
-		
-		
-	def is_holding_item(self, user):
-		return self.held_items.get(user) != None
-		
-		
-	def can_hold_item(self, user):
-		return not self.is_holding_item(user)
-		
-		
-	def hold_item(self, user, item):
-		self.held_items[user] = item
-		
-		
-	def unhold_item(self, user):
-		return self.held_items.pop(user)
-		
-		
-	def hit_user(self, text_before, item, target_msg, vr_penalty):
-		if self.is_holding_item(target_msg.author):
-			held_item = self.unhold_item(target_msg.author)
-			
-			reply = item.name() + " " + item.emoji() + " :boom: "
-			reply += held_item.emoji()
-			reply += text_before
-			reply += "hit the item held by " + self.maketext_user(target_msg.author) + "! "
-			return reply
-		
-		else:
-			reply = item.name() + " " + item.emoji() + " :boom: "
-			reply += text_before
-			reply += "hit "
-			
-			if item.author == target_msg.author:
-				reply += "**themselves**! "
-			else:
-				reply += self.maketext_user(target_msg.author) + "! "
-			
-			reply += "*(" + str(vr_penalty) + " VR)*"
-			self.score_mngr.add(target_msg.author, vr_penalty)
-			return reply
-		
-		
-	def maketext_user(self, user):
-		score = self.score_mngr.get(user)
-		itemboxes = self.itembox_mngr.count(user)
-		seconds_to_next = self.itembox_mngr.seconds_to_next(user)
-	
-		text = "**"
-		text += self.cfg.EMOJI_YOSHI + " "
-		text += user.mention
-		
-		text += " ("
-		text += str(score) + " VR"
-		text += ", "
-		text += str(itemboxes) + self.cfg.EMOJI_ITEMBOX
-		
-		#if seconds_to_next != None:
-		#	text += " -"
-		#	text += str(math.floor(seconds_to_next / 60)) + ":"
-		#	text += format(math.floor(seconds_to_next % 60), "02")
-		
-		text += ")**"
-		return text

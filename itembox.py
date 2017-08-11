@@ -2,48 +2,48 @@ import time
 import math
 
 
-class LastUse:
-
-	def __init__(self, itemboxes_at_this, time):
-		self.itemboxes_at_this = itemboxes_at_this
+class Record:
+	def __init__(self, amount, time):
+		self.amount = amount
 		self.time = time
 
 
 class ItemBoxManager:
-
 	def __init__(self, cfg):
 		self.cfg = cfg
-		self.lastuse_per_user = dict()
+		self.latest_records = dict()
 		
 		
-	def count(self, user):
-		lastuse = self.lastuse_per_user.get(user)
+	# Computes the number of itemboxes a user currently has, taking the
+	# last recorded amount and extrapolating by the time passed since.
+	def get(self, user_id):
+		latest_record = self.latest_records.get(user_id)
 		
-		if lastuse == None:
-			return self.cfg.STARTING_ITEMBOXES
+		if latest_record == None:
+			return self.cfg["itemboxes_initial"]
 			
-		time_since_lastuse = time.time() - lastuse.time
+		time_since = time.time() - latest_record.time
 		
-		itemboxes = math.floor(lastuse.itemboxes_at_this + time_since_lastuse / self.cfg.SECONDS_PER_ITEMBOX)
-		itemboxes = max(0, itemboxes)
-		itemboxes = min(self.cfg.MAX_ITEMBOXES, itemboxes)
-		return itemboxes
+		amount = math.floor(latest_record.amount + time_since / self.cfg["itemboxes_regen_time"])
+		amount = max(amount, 0)
+		amount = min(amount, self.cfg["itemboxes_max"])
+		return amount
 		
 	
-	def seconds_to_next(self, user):
-		lastuse = self.lastuse_per_user.get(user)
+	# Computes how many seconds remain to regenerate the next itembox.
+	def time_until_regen(self, user_id):
+		latest_record = self.latest_records.get(user_id)
 		
-		if lastuse == None:
+		if latest_record == None:
 			return None
 			
-		time_since_lastuse = time.time() - lastuse.time
-		return self.cfg.SECONDS_PER_ITEMBOX - (time_since_lastuse % self.cfg.SECONDS_PER_ITEMBOX)
+		time_since = time.time() - latest_record.time
+		return self.cfg["itemboxes_regen_time"] - (time_since % self.cfg["itemboxes_regen_time"])
 		
 		
-	def try_use(self, user, amount):
-		itemboxes = self.count(user)
-		if itemboxes < amount:
-			return False
-			
-		self.lastuse_per_user[user] = LastUse(itemboxes - amount, time.time())
-		return True
+	def can_spend(self, user_id, amount):
+		return self.get(user_id) >= amount
+		
+		
+	def spend(self, user_id, cost):
+		self.latest_records[user_id] = Record(self.get(user_id) - cost, time.time())

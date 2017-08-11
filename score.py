@@ -2,21 +2,20 @@ import math
 
 
 class ScoreManager:
-
 	def __init__(self, cfg):
 		self.cfg = cfg
-		self.score_per_user = dict()
+		self.scores = dict()
 		
 		
-	def get(self, user):
-		return self.score_per_user.setdefault(user, self.cfg.STARTING_VR)
+	def get(self, user_id):
+		return self.scores.setdefault(user_id, self.cfg["vr_initial"])
 		
 		
-	def add(self, user, delta):
-		score = self.get(user)
+	def add(self, user_id, delta):
+		score = self.get(user_id)
 		
 		score += delta
-		score = max(self.cfg.MIN_VR, score)
-		score = min(self.cfg.MAX_VR, score)
+		score = max(score, self.cfg["vr_min"])
+		score = min(score, self.cfg["vr_max"])
 		
-		self.score_per_user[user] = score
+		self.scores[user_id] = score

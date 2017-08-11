@@ -27,7 +27,7 @@ default_cfg = {
 	
 	"redshell_cost": 4,
 	"redshell_hit_vr": -15,
-	"redshell_time_until_hit": 10,
+	"redshell_time_until_hit": 5,
 	
 	"banana_cost": 3,
 	"banana_hit_vr": -10,
