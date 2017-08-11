@@ -109,6 +109,20 @@ class Replier:
 		self.send_msg(channel_id, reply)
 		
 		
+	def reply_item_use_delayed_target_none(self, channel_id, user_state, target_state, item, was_held, delay):
+		reply = self.make_user_text(user_state) + " "
+		reply += "threw "
+		
+		if was_held:
+			reply += "their held "
+		else:
+			reply += self.make_item_article(item) + " "
+			
+		reply += self.make_item_name(item) + " " + self.make_item_emoji(item) + " "
+		reply += "and it just kept going forever..."
+		self.send_msg(channel_id, reply)
+		
+		
 	def reply_item_hit(self, channel_id, user_state, target_state, item, was_held, simulated_hit):
 		reply = self.make_user_text(user_state) + "'s "
 		

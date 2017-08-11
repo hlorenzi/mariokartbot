@@ -156,7 +156,10 @@ class MarioKartManager:
 		
 	# Returns an object holding the current state of a user.
 	def get_user_state(self, user_id):
-		return UserState(user_id, self.score.get(user_id), self.itemboxes.get(user_id))
+		if user_id == None:
+			return UserState(None, None, None)
+		else:
+			return UserState(user_id, self.score.get(user_id), self.itemboxes.get(user_id))
 
 
 	# Simulates an item hitting a user.
@@ -172,7 +175,7 @@ class MarioKartManager:
 		return SimulatedHit(SimulatedHit.HIT_USER, user_id = target_user_id, vr_penalty = vr_penalty)
 		
 	
-	# Actually performs the effect of a prevreplierusly simulated hit.
+	# Actually performs the effect of a previously simulated hit.
 	def perform_hit(self, simulated_hit):
 		if simulated_hit.kind == SimulatedHit.HIT_NOTHING:
 			return

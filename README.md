@@ -32,7 +32,7 @@ python3 main.py
 
 Each player has a set number of itemboxes, that work like currency.
 They can spend some itemboxes to spawn an item to attack, or to
-hold it behind their karts for protection. Itemboxes also regenerate
+hold it behind their karts for protection. Itemboxes then regenerate
 with time automatically.
 
 Attack other players to lower their VR (Versus Rating). In the future,
@@ -44,7 +44,7 @@ Currently, the following commands are available:
 itemboxes in order to spawn the item! Substitute `ITEM` for one of the
 following:
   - `b` **Banana Peel**: It's placed down on the track. When someone tries to
-use a command or just merely message the channel, there's a chance that
+use a command or just merely messages the channel, there's a chance that
 they will slip on scattered banana peels.
   - `gs` **Green Shell**: It's an immediate-hit attack item. It targets any
 one of the users that messaged the channel recently, with the most recent

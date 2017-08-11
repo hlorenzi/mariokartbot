@@ -26,6 +26,10 @@ class ItemRedShell:
 		
 		if not was_held:
 			mk.itemboxes.spend(self.user_id, self.cost())
+			
+		if self.target_user_id == None:
+			mk.replier.reply_item_use_delayed_target_none(channel_id, user_state, self, was_held)
+			return
 		
 		mk.replier.reply_item_use_delayed_target(channel_id, user_state, target_state, self, was_held, time_until_hit)
 		mk.perform_random_banana_hit(channel_id, self.user_id)
