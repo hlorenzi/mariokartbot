@@ -9,8 +9,9 @@ from item_banana import ItemBanana
 
 
 class UserState:
-	def __init__(self, user_id, vr, itemboxes):
+	def __init__(self, user_id, vr_ranking, vr, itemboxes):
 		self.user_id = user_id
+		self.vr_ranking = vr_ranking
 		self.vr = vr
 		self.itemboxes = itemboxes
 
@@ -68,9 +69,14 @@ class MarioKartManager:
 			return False
 			
 		possible_commands = {
-			"use":  MarioKartManager.decode_command_use,
-			"hold": MarioKartManager.decode_command_hold,
-			"drop": MarioKartManager.decode_command_drop
+			"use":     MarioKartManager.decode_command_use,
+			"hold":    MarioKartManager.decode_command_hold,
+			"drop":    MarioKartManager.decode_command_drop,
+			"top":     MarioKartManager.decode_command_top,
+			"top10":   MarioKartManager.decode_command_top,
+			"leader":  MarioKartManager.decode_command_top,
+			"leaders": MarioKartManager.decode_command_top,
+			"rank":    MarioKartManager.decode_command_rank
 		}
 		
 		decode_command_fn = possible_commands[tokens[0]]
@@ -109,6 +115,9 @@ class MarioKartManager:
 			self.replier.reply_insufficient_itemboxes(self.get_user_state(user_id), channel_id, item)
 			return True
 		
+		# Just make sure user is included in rankings.
+		self.score.add(user_id, 0)
+		
 		item.use(self, channel_id, msg_id, mentioned_target, False)
 		return True
 		
@@ -132,6 +141,9 @@ class MarioKartManager:
 		if not self.itemboxes.can_spend(user_id, item.cost()):
 			self.replier.reply_insufficient_itemboxes(self.get_user_state(user_id), channel_id, item)
 			return True
+		
+		# Just make sure user is included in rankings.
+		self.score.add(user_id, 0)
 		
 		self.held_items[user_id] = item
 		self.replier.reply_hold_item(self.get_user_state(user_id), channel_id, item)
@@ -162,6 +174,44 @@ class MarioKartManager:
 		return True
 		
 		
+	# Decodes and executes a "top" command.
+	def decode_command_top(self, channel_id, user_id, msg_id, tokens):
+		if len(tokens) != 1:
+			return False
+			
+		top10 = self.score.get_sorted_user_ids()[-10:]
+		states = []
+		for user in top10:
+			states.insert(0, self.get_user_state(user))
+		
+		self.replier.reply_top_rankings(channel_id, states)
+		return True
+		
+		
+	# Decodes and executes a "rank" command.
+	def decode_command_rank(self, channel_id, user_id, msg_id, tokens):
+		user_id = user_id
+		
+		if len(tokens) < 1 or len(tokens) > 2:
+			return False
+			
+		if len(tokens) == 2:
+			user_id = self.decode_mention(msg_id, tokens[1])
+			if user_id == None:
+				return False
+			
+		index = self.score.get_index(user_id)
+		states = []
+		
+		if index != None:
+			rankings = self.score.get_sorted_user_ids()[index - 4:index + 5]
+			for user in rankings:
+				states.insert(0, self.get_user_state(user))
+		
+		self.replier.reply_player_rankings(channel_id, states, user_id)
+		return True
+		
+		
 	# Decodes an item name and returns its constructor.
 	def decode_item(self, token):
 		possible_items = {
@@ -185,9 +235,9 @@ class MarioKartManager:
 	# Returns an object holding the current state of a user.
 	def get_user_state(self, user_id):
 		if user_id == None:
-			return UserState(None, None, None)
+			return UserState(None, None, None, None)
 		else:
-			return UserState(user_id, self.score.get(user_id), self.itemboxes.get(user_id))
+			return UserState(user_id, self.score.get_ranking(user_id), self.score.get(user_id), self.itemboxes.get(user_id))
 
 
 	# Simulates an item hitting a user.

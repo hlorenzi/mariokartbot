@@ -139,6 +139,40 @@ class Replier:
 		self.send_msg(channel_id, reply)
 		
 		
+	def reply_top_rankings(self, channel_id, user_states):
+		reply = "```\n=== Top Players ===\n"
+		
+		for state in user_states:
+			reply += "#" + str(state.vr_ranking).rjust(self.cfg["ranking_justify"]) + " : "
+			reply += str(state.vr).rjust(self.cfg["vr_justify"]) + " VR : "
+			reply += self.io.get_user_name(state.user_id)
+			reply += "\n"
+			
+		if len(user_states) == 0:
+			reply += "No players yet!"
+			
+		reply += "\n```"
+		
+		self.send_msg(channel_id, reply)
+		
+		
+	def reply_player_rankings(self, channel_id, user_states, user_id):
+		reply = "```\n=== Players Ranked Around " + self.io.get_user_name(user_id) + " ===\n"
+		
+		for state in user_states:
+			reply += "#" + str(state.vr_ranking).rjust(self.cfg["ranking_justify"]) + " : "
+			reply += str(state.vr).rjust(self.cfg["vr_justify"]) + " VR : "
+			reply += self.io.get_user_name(state.user_id)
+			reply += "\n"
+			
+		if len(user_states) == 0:
+			reply += "No players yet!"
+			
+		reply += "\n```"
+		
+		self.send_msg(channel_id, reply)
+		
+		
 	def make_item_name(self, item):
 		names = {
 			ItemGreenShell: "GREEN SHELL",

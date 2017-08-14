@@ -22,6 +22,10 @@ class DiscordIO:
 		self.async_queue.append(self.client.send_message(channel_id, content))
 		
 		
+	def get_user_name(self, user_id):
+		return user_id.display_name
+		
+		
 	def get_user_mention(self, user_id):
 		return user_id.mention
 		

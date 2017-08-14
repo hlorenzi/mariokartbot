@@ -35,8 +35,8 @@ They can spend some itemboxes to spawn an item to attack, or to
 hold it behind their karts for protection. Itemboxes then regenerate
 with time automatically.
 
-Attack other players to lower their VR (Versus Rating). In the future,
-the game will be able to display leaderboards of all active players.
+Attack other players to lower their VR (Versus Rating). Then, take a
+look at the leaderboards to see where you stand!
 
 Currently, the following commands are available:
 
@@ -63,6 +63,11 @@ spawn the item!
 
 - `=drop [TARGET]` Drops the currently-held item, activating its effect.
 Takes an optional target (for applicable items).
+
+- `=top` Shows the currently top-ranked players.
+
+- `=rank [USER]` Shows the users ranked around the given user (or yourself,
+if no argument is given).
 
 Currently, the bot can itself be target of items (mainly for testing
 purposes). If you'd like the bot to hold a Banana Peel, use the debug

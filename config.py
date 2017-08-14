@@ -10,6 +10,9 @@ default_cfg = {
 	"emoji_redshell": None,
 	"emoji_banana": None,
 	
+	"ranking_justify": 5,
+	"vr_justify": 6,
+	
 	"max_messagelog_len_per_channel": 100,
 	
 	"vr_initial": 1000,
